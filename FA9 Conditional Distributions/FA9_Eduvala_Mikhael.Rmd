@@ -1,0 +1,438 @@
+---
+title: "APM1110 Formative Assessment 9: Conditional Distributions and Stochastic Independence"
+author: "Eduvala, Mikhael S."
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    latex_engine: xelatex
+    fig_caption: true
+geometry: margin=1in
+fontsize: 11pt
+header-includes:
+  - \usepackage{float}
+  - \usepackage{booktabs}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, fig.align = "center",
+                      fig.pos = "H", out.width = "90%")
+library(ggplot2)
+library(knitr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+# FA 9: Conditional Distributions and Stochastic Independence 
+
+# INTRODUCTION:
+
+This assessment applies joint, marginal, conditional distributions, stochastic independence, and sums of independent random variables. All data used in this assessment are not real and only simulated from specified probability distributions. Furthermore, 'set.seed()' is used throughout the assessment.
+
+The report has four parts:
+
+1.  Stochastic independence
+2.  Sums of independent random variables
+3.  Conditional distributions: Discrete case
+4.  Conditional distributions: Continuous case
+
+# Dataset Description:
+
+| Part | Variables | Distributions and parameters | n |
+|-----------------|-----------------|----------------------|-----------------|
+| 1 | $X \sim \text{Binomial}(4, 0.4)$, $Y \sim \text{Binomial}(3, 0.5)$, generated independently. A third variable $Z$ is generated *dependent* on $X$ for contrast. | $Z \mid X=x \sim \text{Binomial}(3,\ 0.2+0.15x)$ | 5,000 |
+| 2 | $X \sim N(\mu=50, \sigma=10)$, $Y \sim \text{Exponential}(\lambda=0.1)$, independent | $E[Y]=10$, $\text{Var}(Y)=100$ | 10,000 |
+| 3 | $Y$ = weekly study level (Low, Medium, High), $X$ = grade category (Fail, Pass, Good, Excellent) | $P(Y)=(0.30, 0.45, 0.25)$; $P(X \mid Y)$ differs by study level (see the conditional probability table below) | 2,000 |
+| 4 | $(X, Y)$ = (height in cm, weight in kg) | Bivariate normal, $\mu=(170, 65)$, $\sigma=(8, 10)$, $\rho=0.6$ | 5,000 |
+
+The data is simulated, no real data is used in this assessment.
+
+The conditional probabilities used to generate the grade $X$ for each study level $Y$ in Part 3 are:
+
+| Study level $Y$ | $P(\text{Fail}\mid Y)$ | $P(\text{Pass}\mid Y)$ | $P(\text{Good}\mid Y)$ | $P(\text{Excellent}\mid Y)$ | Total |
+|:-----------|:----------:|:----------:|:----------:|:----------:|:----------:|
+| Low (P = 0.30) | 0.35 | 0.45 | 0.17 | 0.03 | 1 |
+| Medium (P = 0.45) | 0.08 | 0.45 | 0.35 | 0.12 | 1 |
+| High (P = 0.25) | 0.02 | 0.20 | 0.38 | 0.40 | 1 |
+
+Each row is a probability distribution, and it sums up to 1. These values are the same as the `cond_probs` matrix in the Part 3 code.
+
+# Stochastic Independence
+
+## Part 1(a): Random Variables
+
+$X$ is the number of successes in 4 independent trials with success probability 0.4, and $Y$ is the number of successes in 3 independent trials with success probability 0.5. Both are generated with `rbinom()`, using separate calls so that the draws are independent.
+
+```{r p1-generate}
+set.seed(2026)
+n1 <- 5000
+X1 <- rbinom(n1, size = 4, prob = 0.4)
+Y1 <- rbinom(n1, size = 3, prob = 0.5)
+# Contrast variable: depends on X by construction
+Z1 <- rbinom(n1, size = 3, prob = 0.2 + 0.15 * X1)
+
+d1 <- data.frame(X = X1, Y = Y1, Z = Z1)
+head(d1)
+summary(d1)
+```
+
+## Part 1(b): Relationship between X and Y
+
+```{r p1-relationship}
+tab_xy <- table(X = d1$X, Y = d1$Y)
+kable(tab_xy, caption = "Table 1. Observed counts of (X, Y)")
+
+cat("Sample correlation between X and Y:", round(cor(d1$X, d1$Y), 4), "\n")
+
+ggplot(as.data.frame(prop.table(tab_xy)), aes(x = X, y = Y, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Freq, 3))) +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Figure 1. Joint relative frequencies of X and Y", fill = "P(X, Y)")
+```
+
+The correlation is essentially zero, and the heat map shows no visible pattern that would suggest the two variables move together.
+
+## Part 1(c): Joint pmf versus the product of marginals
+
+```{r p1-pmf}
+joint_xy <- prop.table(tab_xy)          # empirical joint pmf
+px <- rowSums(joint_xy)                 #X pmf 
+py <- colSums(joint_xy)                 #Y pmf 
+prod_xy <- outer(px, py)                # product of marginals
+
+kable(round(joint_xy, 4),  caption = "Table 2. Empirical joint pmf  f(x, y)")
+kable(round(rbind(px), 4), caption = "Table 3a. Marginal pmf of X")
+kable(round(rbind(py), 4), caption = "Table 3b. Marginal pmf of Y")
+kable(round(prod_xy, 4),   caption = "Table 4. Product of marginals  f_X(x) f_Y(y)")
+
+cat("Maximum absolute difference |f(x,y) - f_X(x) f_Y(y)|:",
+    round(max(abs(joint_xy - prod_xy)), 4), "\n")
+
+chisq.test(tab_xy)
+```
+
+## Part 1(d): Factorization criterion
+
+Independence requires $f_{X,Y}(x,y) = f_X(x) f_Y(y)$ for **every** pair $(x, y)$. In Table 2 and Table 4, the entries agree closely and the largest discrepancy is on the order of a few thousandths, which is what sampling error alone would produce with 5,000 observations. The chi-square test does not reject independence (large p-value), and this is consistent with how the data were generated. We therefore conclude that $X$ and $Y$ can reasonably be treated as independent.
+
+For comparison, the variable $Z$ was built to depend on $X$. Here the factorization fails clearly:
+
+```{r p1-contrast}
+tab_xz <- table(X = d1$X, Z = d1$Z)
+joint_xz <- prop.table(tab_xz)
+prod_xz  <- outer(rowSums(joint_xz), colSums(joint_xz))
+
+cat("Correlation of X and Z:", round(cor(d1$X, d1$Z), 4), "\n")
+cat("Maximum absolute difference |f(x,z) - f_X(x) f_Z(z)|:",
+    round(max(abs(joint_xz - prod_xz)), 4), "\n")
+chisq.test(tab_xz)
+```
+
+The differences are much larger and the chi-square test rejects independence decisively. This contrast shows that the check is able to detect dependence when it exists, so the conclusion for $(X, Y)$ is meaningful and not an artifact of the method.
+
+# Sums of Independent Random Variables
+
+## Part 2(a): Distributions
+
+- $X \sim N(\mu_X = 50,\ \sigma_X^2 = 100)$
+- $Y \sim \text{Exponential}(\lambda = 0.1)$, so $E[Y] = 1/\lambda = 10$ and $\text{Var}(Y) = 1/\lambda^2 = 100$
+
+$X$ and $Y$ are independent by construction.
+
+## Part 2(b): Simulation
+
+```{r p2-generate}
+set.seed(2026)
+n2 <- 10000                       
+X2 <- rnorm(n2, mean = 50, sd = 10)
+Y2 <- rexp(n2, rate = 0.1)      
+
+cat("Correlation of X and Y (should be near 0):", round(cor(X2, Y2), 4), "\n")
+```
+
+## Part 2(c): Distribution of S = X + Y
+
+```{r p2-hist}
+S <- X2 + Y2
+
+ggplot(data.frame(S), aes(x = S)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 50,
+                 fill = "steelblue", color = "white") +
+  geom_density(color = "red", linewidth = 1) +
+  stat_function(fun = dnorm, args = list(mean = mean(S), sd = sd(S)),
+                linetype = "dashed", linewidth = 1) +
+  labs(title = "Figure 2. Distribution of S = X + Y",
+       subtitle = "Red: kernel density of S. Dashed: normal curve with same mean and SD",
+       x = "S", y = "Density")
+```
+
+The histogram of $S$ is unimodal and **right-skewed**. The skewness comes from the exponential component, which the normal component does not cancel. A normal curve with the same mean and variance (dashed) fits the center reasonably well but misses the longer right tail. The sum of independent variables is not normal unless both components are normal.
+
+## Part 2(d): Theoretical versus simulated moments
+
+For independent $X$ and $Y$: $E[S] = E[X] + E[Y]$ and $\text{Var}(S) = \text{Var}(X) + \text{Var}(Y)$.
+
+```{r p2-moments}
+theory_mean <- 50 + 1 / 0.1
+theory_var  <- 10^2 + 1 / 0.1^2
+
+comparison <- data.frame(
+  Quantity    = c("E[S]", "Var(S)"),
+  Theoretical = c(theory_mean, theory_var),
+  Simulated   = c(mean(S), var(S))
+)
+comparison$Difference <- comparison$Simulated - comparison$Theoretical
+kable(comparison, digits = 3, caption = "Table 5. Theoretical and simulated moments of S")
+
+# Sum of the separate sample variances
+cat("var(X) + var(Y) from the sample:", round(var(X2) + var(Y2), 3), "\n")
+cat("var(S) from the sample:         ", round(var(S), 3), "\n")
+```
+
+The simulated mean is very close to 60 and the simulated variance is close to 200. The sample variance of $S$ also agrees closely with $\text{var}(X) + \text{var}(Y)$ computed from the sample. This supports the properties of sums of independent random variables. the mean always adds, and the variance adds because the covariance term $2\,\text{Cov}(X,Y)$ is zero under independence. The small remaining differences are due to simulation error and shrink as $n$ grows.
+
+# Conditional Distributions: Discrete Case
+
+## Part 3(a): Joint probability distribution
+
+Let $Y$ be weekly study level and $X$ be the grade category. Data are simulated so that better grades are more likely at higher study levels. The generating distributions are $Y \sim$ Categorical$(0.30, 0.45, 0.25)$ over (Low, Medium, High) and $X \mid Y$ as given in the conditional probability table in the Simulation Design section.
+
+```{r p3-generate}
+set.seed(2026)
+n3 <- 2000
+y_levels <- c("Low", "Medium", "High")
+x_levels <- c("Fail", "Pass", "Good", "Excellent")
+
+Y3 <- sample(y_levels, n3, replace = TRUE, prob = c(0.30, 0.45, 0.25))
+
+# P(X | Y): rows = study level, columns = grade
+cond_probs <- rbind(Low    = c(0.35, 0.45, 0.17, 0.03),
+                    Medium = c(0.08, 0.45, 0.35, 0.12),
+                    High   = c(0.02, 0.20, 0.38, 0.40))
+colnames(cond_probs) <- x_levels
+
+X3 <- character(n3)
+for (lev in y_levels) {
+  idx <- which(Y3 == lev)
+  X3[idx] <- sample(x_levels, length(idx), replace = TRUE, prob = cond_probs[lev, ])
+}
+X3 <- factor(X3, levels = x_levels)
+Y3 <- factor(Y3, levels = y_levels)
+
+tab3   <- table(Grade = X3, Study = Y3)          # rows = X, columns = Y
+joint3 <- prop.table(tab3)
+
+kable(tab3, caption = "Table 6. Observed counts")
+kable(round(joint3, 4), caption = "Table 7. Joint pmf  f(x, y) = P(X = x, Y = y)")
+cat("Sum of joint pmf:", sum(joint3), "\n")
+```
+
+## Part 3(b): Marginal distributions
+
+```{r p3-marginals}
+px3 <- rowSums(joint3)    # marginal of X (grade)
+py3 <- colSums(joint3)    # marginal of Y (study level)
+
+kable(round(rbind(px3), 4), caption = "Table 8a. Marginal pmf of X (Grade)")
+kable(round(rbind(py3), 4), caption = "Table 8b. Marginal pmf of Y (Study level)")
+```
+
+Each marginal is obtained by summing the joint pmf over the other variable: $f_X(x) = \sum_y f_{X,Y}(x,y)$ and $f_Y(y) = \sum_x f_{X,Y}(x,y)$. Both sum to 1.
+
+## Part 3(c): Conditional distribution of X given Y = y
+
+The conditional pmf is $f_{X|Y}(x|y) = \dfrac{f_{X,Y}(x,y)}{f_Y(y)}$.
+
+```{r p3-conditional}
+
+cond3 <- sweep(joint3, 2, py3, "/")
+kable(round(cond3, 4), caption = "Table 9. Conditional pmf  P(X = x | Y = y)  (each column sums to 1)")
+colSums(cond3)
+
+# P(X = Excellent | Y = High) = P(Excellent, High) / P(High)
+joint3["Excellent", "High"] / py3["High"]
+
+# Conditional distribution for a particular value, Y = High
+cond_high <- cond3[, "High"]
+kable(round(rbind(cond_high), 4), caption = "Table 10. P(X = x | Y = High)")
+```
+
+```{r p3-plot}
+cond_df <- as.data.frame(as.table(cond3))
+names(cond_df) <- c("Grade", "Study", "Prob")
+marg_df <- data.frame(Grade = names(px3), Prob = as.numeric(px3))
+
+ggplot(cond_df, aes(x = Grade, y = Prob, fill = Study)) +
+  geom_col(position = "dodge") +
+  geom_point(data = marg_df, aes(x = Grade, y = Prob), inherit.aes = FALSE,
+             shape = 18, size = 4, color = "black") +
+  labs(title = "Figure 3. P(Grade | Study level) versus the marginal P(Grade)",
+       subtitle = "Black diamonds: marginal distribution of Grade",
+       y = "Probability")
+```
+
+## Part 3(d): Interpretation
+
+The distribution of $X$ changes substantially when we condition on $Y$. Given $Y = \text{Low}$, the most likely grade is "Pass" and a large share of students fail. Given $Y = \text{High}$, "Good" and "Excellent" dominate and failing is rare. Table 9 closely matches the true conditional probabilities used in the simulation (`cond_probs`).
+
+The marginal distribution of $X$ (black diamonds) is a weighted average of the conditional distributions, with the weights $f_Y(y)$. Because the conditional distributions differ from the marginal, knowing $Y$ gives information about $X$, and $f_{X|Y}(x|y) \neq f_X(x)$. Equivalently, $X$ and $Y$ are **not independent**, unlike the pair in Part 1, where each column of the conditional table would match the marginal.
+
+```{r p3-chisq}
+chisq.test(tab3)
+```
+
+The chi-square test confirms this with a very small p-value.
+
+# Conditional Distributions: Continuous Case
+
+## Part 4(a): The random variables
+
+Let $X$ be height (cm) and $Y$ be weight (kg), generated from a bivariate normal distribution with $\mu_X=170$, $\mu_Y=65$, $\sigma_X=8$, $\sigma_Y=10$, and correlation $\rho=0.6$.
+
+```{r p4-generate}
+set.seed(2026)
+n4 <- 5000
+mu_x <- 170; mu_y <- 65; sd_x <- 8; sd_y <- 10; rho <- 0.6
+Sigma <- matrix(c(sd_x^2, rho * sd_x * sd_y,
+                  rho * sd_x * sd_y, sd_y^2), nrow = 2)
+
+xy <- MASS::mvrnorm(n4, mu = c(mu_x, mu_y), Sigma = Sigma)
+d4 <- data.frame(X = xy[, 1], Y = xy[, 2])
+
+kable(data.frame(Variable = c("X (height)", "Y (weight)"),
+                 Mean = c(mean(d4$X), mean(d4$Y)),
+                 SD   = c(sd(d4$X),   sd(d4$Y)),
+                 Min  = c(min(d4$X),  min(d4$Y)),
+                 Max  = c(max(d4$X),  max(d4$Y))),
+      digits = 2, caption = "Table 11. Summary of the simulated data")
+cat("Sample correlation:", round(cor(d4$X, d4$Y), 3), "\n")
+```
+
+Both variables are continuous, roughly symmetric and bell-shaped, and positively correlated.
+
+## Part 4(b): Marginal and joint distributions
+
+```{r p4-marginals}
+p_x <- ggplot(d4, aes(x = X)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40, fill = "steelblue", color = "white") +
+  stat_function(fun = dnorm, args = list(mean = mu_x, sd = sd_x), color = "red", linewidth = 1) +
+  labs(title = "Figure 4a. Marginal of X (height)", x = "Height (cm)", y = "Density")
+
+p_y <- ggplot(d4, aes(x = Y)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40, fill = "darkorange", color = "white") +
+  stat_function(fun = dnorm, args = list(mean = mu_y, sd = sd_y), color = "red", linewidth = 1) +
+  labs(title = "Figure 4b. Marginal of Y (weight)", x = "Weight (kg)", y = "Density")
+
+print(p_x)
+print(p_y)
+```
+
+The histograms follow the theoretical normal marginals (red curves).
+
+```{r p4-joint}
+ggplot(d4, aes(x = X, y = Y)) +
+  geom_point(alpha = 0.25, size = 0.8) +
+  geom_density_2d(color = "red") +
+  labs(title = "Figure 5. Joint distribution of X and Y",
+       x = "Height (cm)", y = "Weight (kg)")
+```
+
+The elliptical contours tilt upward, which is the signature of a positively correlated bivariate normal distribution. Since the joint distribution is not the product of the marginals, $X$ and $Y$ are dependent.
+
+## Part 4(c): Empirical conditional distribution of X given Y
+
+Because $Y$ is continuous, $P(Y=y)=0$, so we condition on a narrow interval around $y_0 = 75$ kg: $74 \le Y \le 76$.
+
+```{r p4-conditional}
+y0 <- 75
+cond_x <- d4$X[d4$Y >= y0 - 1 & d4$Y <= y0 + 1]
+
+cat("Observations in the interval:", length(cond_x), "\n")
+cat("Conditional sample mean of X:", round(mean(cond_x), 2), "\n")
+cat("Conditional sample SD of X:  ", round(sd(cond_x), 2), "\n")
+
+# Conditional distribution of X | Y = y0 for a bivariate normal
+cond_mean <- mu_x + rho * (sd_x / sd_y) * (y0 - mu_y)
+cond_sd   <- sd_x * sqrt(1 - rho^2)
+cat("Theoretical E[X | Y = 75]:", cond_mean, "\n")
+cat("Theoretical SD[X | Y = 75]:", cond_sd, "\n")
+```
+
+```{r p4-cond-plot}
+dens_df <- rbind(
+  data.frame(X = d4$X, Group = "Unconditional X"),
+  data.frame(X = cond_x, Group = "X given 74 <= Y <= 76")
+)
+
+ggplot(dens_df, aes(x = X, fill = Group, color = Group)) +
+  geom_density(alpha = 0.3) +
+  stat_function(fun = dnorm, args = list(mean = cond_mean, sd = cond_sd),
+                inherit.aes = FALSE, linetype = "dashed", linewidth = 1) +
+  labs(title = "Figure 6. Conditional density of X given Y near 75 kg",
+       subtitle = "Dashed: theoretical N(174.8, 6.4^2) conditional density",
+       x = "Height (cm)", y = "Density")
+```
+
+To see how the conditional distribution moves with $Y$, we can also compare low, middle, and high weight bands:
+
+```{r p4-bands}
+d4$Yband <- cut(d4$Y, breaks = quantile(d4$Y, c(0, 1/3, 2/3, 1)),
+                labels = c("Low Y", "Middle Y", "High Y"), include.lowest = TRUE)
+
+ggplot(d4, aes(x = X, fill = Yband, color = Yband)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "Figure 7. Density of X within bands of Y", x = "Height (cm)", y = "Density")
+
+aggregate(X ~ Yband, data = d4, FUN = function(v) c(mean = mean(v), sd = sd(v)))
+```
+
+## Part 4(d): Interpretation and the conditional density formula
+
+The conditional density is $f_{X|Y}(x|y) = \dfrac{f_{X,Y}(x,y)}{f_Y(y)}$. We can verify this numerically by dividing the bivariate normal density at $y = 75$ by the marginal density of $Y$ and comparing the result with the known conditional normal density:
+
+```{r p4-formula}
+dbvn <- function(x, y, mx, my, sx, sy, r) {
+  z <- ((x - mx) / sx)^2 - 2 * r * (x - mx) * (y - my) / (sx * sy) + ((y - my) / sy)^2
+  exp(-z / (2 * (1 - r^2))) / (2 * pi * sx * sy * sqrt(1 - r^2))
+}
+
+xs <- seq(140, 205, length.out = 200)
+f_joint    <- dbvn(xs, y0, mu_x, mu_y, sd_x, sd_y, rho)   # f_{X,Y}(x, 75)
+f_marg_y   <- dnorm(y0, mu_y, sd_y)                         # f_Y(75)
+f_cond_num <- f_joint / f_marg_y                            # f_{X|Y}(x | 75)
+f_cond_th  <- dnorm(xs, cond_mean, cond_sd)                 # closed-form conditional
+
+cat("Max |f_joint/f_Y - N(cond_mean, cond_sd)| =",
+    format(max(abs(f_cond_num - f_cond_th)), digits = 3), "\n")
+
+plot(xs, f_cond_num, type = "l", lwd = 2, col = "blue",
+     xlab = "x (height, cm)", ylab = "Density",
+     main = "Figure 8. f(x, y=75) / f_Y(75) versus closed-form conditional")
+lines(xs, f_cond_th, col = "red", lty = 2, lwd = 2)
+legend("topright", legend = c("Joint / marginal", "Closed-form N(174.8, 6.4^2)"),
+       col = c("blue", "red"), lty = c(1, 2), lwd = 2, bty = "n")
+```
+
+The two curves coincide (the difference is of the order of machine precision), confirming that the conditional density is the joint density rescaled by $f_Y(y)$ so that it integrates to 1.
+
+**How conditioning on Y changes X.**
+
+- **The center shifts.** The unconditional mean of height is 170 cm, but among people weighing about 75 kg the mean height is about 174.8 cm. Because $\rho > 0$, heavier people tend to be taller.
+- **The spread shrinks.** The unconditional SD is 8 cm, but the conditional SD is $8\sqrt{1-0.6^2} = 6.4$ cm. Knowing $Y$ removes part of the uncertainty about $X$ (the proportion of variance explained is $\rho^2 = 0.36$).
+- **The shape stays normal.** The conditional distribution of a bivariate normal is itself normal.
+
+The empirical conditional mean and SD from the narrow band are close to the theoretical values 174.8 and 6.4, and the conditional density curve (Figure 6) lies to the right of and is narrower than the unconditional one. Figure 7 shows the same pattern across weight bands: the density of $X$ moves to the right as $Y$ increases. If $X$ and $Y$ were independent, all these curves would be identical to the marginal density of $X$.
+
+# Conclusion
+
+In Part 1, the two variables $X$ and $Y$ were made separately, so they should be independent. The joint probabilities were almost the same as the marginal probabilities multiplied together, and the correlation was close to zero. The chi-square test also showed no sign of dependence. Then I made a variable $Z$ that depends on $X$, and for that pair the numbers did not match at all. This showed me that the method can tell the difference between independent and dependent variables.
+
+In Part 2, I added a normal variable and an exponential variable to get $S = X + Y$. The mean of $S$ came out to about 60 and the variance came out to about 200. These are the same as what we get by adding the means and adding the variances, since $X$ and $Y$ are independent. I also noticed that the histogram of $S$ was skewed to the right, so adding two variables does not always give a normal shape.
+
+In Part 3, the chances of getting each grade changed depending on how much a student studied. This means that knowing the study level tells us something about the grade, so the two are not independent.
+
+In Part 4, when I looked only at people around 75 kg, their heights were higher on average and less spread out than everyone's heights together. This matches the formula $f_{X|Y}(x|y) = f_{X,Y}(x,y) / f_Y(y)$.
+
+Overall, I learned that if two variables are independent, knowing one does not change the other, but if they are dependent, knowing one changes what we expect from the other.
